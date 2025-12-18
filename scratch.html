@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scratch Heart — адаптивна картичка</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;700&family=Lobster&family=Marck+Script&display=swap" rel="stylesheet">
+
+<style>
+  :root{ --card-w:min(480px,92vw); }
+  body{
+    margin:0; min-height:100vh; display:grid; place-items:center;
+    background:#fff; font-family:"Comfortaa",system-ui,Segoe UI,Roboto,Arial;
+  }
+  .wrap{
+    width:var(--card-w); border-radius:22px; overflow:hidden;
+    background:#fff; box-shadow:0 12px 36px rgba(0,0,0,.14);
+  }
+  .card{
+    position:relative;
+    width:100%;
+    aspect-ratio:9/16;
+    background-size:cover;
+    background-position:center;
+    background-repeat:no-repeat;
+  }
+
+  /* 💛 Центрирано и адаптивно сърце */
+  .heartBox{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    /* Увеличи или намали тук ↓ */
+   width:min(100vw,600px);
+    aspect-ratio:1/1;
+    touch-action:none;
+    z-index:2;
+  }
+
+  /* Автоматично мащабиране според височината */
+  @media (max-height:700px){
+    .heartBox{ width:min(85vw,480px); }
+  }
+  @media (max-height:600px){
+    .heartBox{ width:min(80vw,440px); }
+  }
+  @media (min-height:1000px){
+    .heartBox{ width:min(100vw,580px); }
+  }
+
+  canvas#heart{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    z-index:2;
+    cursor:grab;
+    image-rendering:auto;
+    transition:opacity .45s ease;
+  }
+
+  .revealText{
+    position:absolute;
+    bottom:10%;
+    left:50%;
+    transform:translateX(-50%) translateY(10px);
+    text-align:center;
+    opacity:0;
+    transition:opacity .35s ease, transform .35s ease;
+  }
+  .revealText.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .revealText h2{ margin:.15rem 0 .1rem; font-size:clamp(22px,5.5vw,30px); font-family:"Lobster","Comfortaa",cursive; }
+  .revealText p{ margin:.15rem 0 0; font-size:clamp(16px,4.5vw,20px); }
+
+  .footer{ text-align:center; opacity:.65; font-size:14px; margin-top:6px; }
+  .btnBar{ display:flex; gap:12px; justify-content:center; margin-top:10px; }
+  .btn{
+    appearance:none; border:none; border-radius:12px; padding:10px 14px;
+    background:#111; color:#fff; font-weight:700; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.12);
+    font-family:"Comfortaa",system-ui,Segoe UI,Roboto,Arial;
+  }
+  .btn.secondary{ background:#eaeaea; color:#111; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="card">
+      <div class="heartBox" id="heartBox">
+        <canvas id="heart" aria-label="Scratchable golden heart"></canvas>
+      </div>
+
+      <div id="revealText" class="revealText">
+       
+      </div>
+    </div>
+
+    <div class="footer">
+</div>
+
+    <div class="btnBar">
+      <button class="btn secondary" id="btnReset" type="button"></button>
+      <button class="btn" id="btnReveal" type="button"></button>
+    </div>
+  </div>
+
+<script>
+const HEART_IMG  = 'gold-heart.jpg';   // 🩶 снимката на златното сърце
+const REVEAL_IMG = 'reveal.jpg';       // 🩶 фоновото изображение
+const IMAGE_ZOOM = 1.32;
+const HEART_FILL = 1;
+const AUTO_REVEAL_PERCENT = 70;
+
+const card = document.getElementById('card');
+const heartBox = document.getElementById('heartBox');
+const txt = document.getElementById('revealText');
+const cvsHeart = document.getElementById('heart');
+const ctxH = cvsHeart.getContext('2d', { willReadFrequently:true });
+ctxH.imageSmoothingEnabled = true;
+ctxH.imageSmoothingQuality = 'high';
+
+card.style.backgroundImage = `url('${REVEAL_IMG}')`;
+
+let imgHeartOk=false, totalHeartPixels=0;
+const imgHeart = new Image();
+imgHeart.onload = ()=>{ imgHeartOk=true; sizeAll(); drawHeart(); computeHeartArea(); };
+imgHeart.onerror= ()=>{ imgHeartOk=false; sizeAll(); drawHeart(); computeHeartArea(); };
+imgHeart.src = HEART_IMG;
+
+function sizeAll(){
+  const bw = heartBox.clientWidth;
+  const bh = heartBox.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+  cvsHeart.width  = bw * dpr;
+  cvsHeart.height = bh * dpr;
+  cvsHeart.style.width  = bw + 'px';
+  cvsHeart.style.height = bh + 'px';
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{ sizeAll(); drawHeart(); computeHeartArea(); });
+new ResizeObserver(()=>{ sizeAll(); drawHeart(); }).observe(heartBox);
+
+function heartPath(ctx,w,h){
+  const s = Math.min(w,h) * 0.50 * HEART_FILL, x=w/2, y=h/2;
+  ctx.beginPath();
+  ctx.moveTo(x, y - s*0.10);
+  ctx.bezierCurveTo(x + s*0.95, y - s*0.78, x + s*0.98, y + s*0.75, x, y + s*0.98);
+  ctx.bezierCurveTo(x - s*0.98, y + s*0.75, x - s*0.95, y - s*0.78, x, y - s*0.10);
+  ctx.closePath();
+}
+
+function drawHeart(){
+  const w=cvsHeart.width, h=cvsHeart.height;
+  ctxH.clearRect(0,0,w,h);
+  heartPath(ctxH,w,h);
+
+  if(imgHeartOk){
+    ctxH.save(); ctxH.clip();
+    const iw = imgHeart.naturalWidth, ih = imgHeart.naturalHeight;
+    const cover = Math.max(w/iw, h/ih) * IMAGE_ZOOM;
+    const dw = iw*cover, dh = ih*cover;
+    const dx = (w - dw)/2, dy = (h - dh)/2;
+    ctxH.drawImage(imgHeart, dx, dy, dw, dh);
+    const grad = ctxH.createRadialGradient(w*0.55,h*0.24, w*0.06, w*0.55,h*0.24, Math.max(w,h)*0.65);
+    ctxH.globalCompositeOperation='soft-light';
+    grad.addColorStop(0,'rgba(255,255,255,.35)'); grad.addColorStop(1,'rgba(0,0,0,0)');
+    ctxH.fillStyle = grad; ctxH.fillRect(0,0,w,h);
+    ctxH.restore();
+  } else {
+    const g = ctxH.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#f7e799'); g.addColorStop(.35,'#e6c967');
+    g.addColorStop(.7,'#caa23b'); g.addColorStop(1,'#a77b21');
+    ctxH.fillStyle = g; ctxH.fill();
+  }
+  ctxH.globalCompositeOperation='destination-out';
+}
+
+function computeHeartArea(){
+  try{
+    const w=cvsHeart.width,h=cvsHeart.height;
+    const imgd=ctxH.getImageData(0,0,w,h);
+    let count=0; for(let i=3;i<imgd.data.length;i+=4) if(imgd.data[i]>0) count++;
+    totalHeartPixels = count || 1;
+  }catch(e){ totalHeartPixels = cvsHeart.width*cvsHeart.height*0.65; }
+}
+
+/* Reveal / reset */
+function revealAll(){
+  cvsHeart.style.opacity='0';
+  cvsHeart.style.pointerEvents='none';
+  txt.classList.add('show');
+}
+function resetHeart(){
+  cvsHeart.style.opacity = '1';
+  cvsHeart.style.pointerEvents = 'auto';
+  txt.classList.remove('show');
+
+  // малко забавяне за стабилно прерисуване
+  setTimeout(() => {
+    sizeAll();
+    drawHeart();
+    computeHeartArea();
+  }, 200);
+}
+
+document.getElementById('btnReveal').addEventListener('click', revealAll);
+document.getElementById('btnReset').addEventListener('click', resetHeart);
+
+/* SCRATCH */
+let drawing=false;
+const brush = ()=> Math.max(10, Math.round(cvsHeart.width*0.03));
+function getPointerPos(e){
+  const r=cvsHeart.getBoundingClientRect(), dpr=(window.devicePixelRatio||1);
+  return { x:(e.clientX-r.left)*dpr, y:(e.clientY-r.top)*dpr };
+}
+function scratchAt(x,y){
+  ctxH.beginPath(); ctxH.arc(x,y,brush(),0,Math.PI*2); ctxH.fill();
+}
+function checkAutoReveal(){
+  try{
+    const w=cvsHeart.width,h=cvsHeart.height,imgd=ctxH.getImageData(0,0,w,h);
+    let remaining=0; for(let i=3;i<imgd.data.length;i+=4) if(imgd.data[i]>0) remaining++;
+    const cleared=Math.max(0,totalHeartPixels-remaining);
+    const pct=Math.round(cleared/totalHeartPixels*100);
+    if(pct>=AUTO_REVEAL_PERCENT) revealAll();
+  }catch(e){}
+}
+cvsHeart.addEventListener('pointerdown',e=>{drawing=true;cvsHeart.setPointerCapture?.(e.pointerId);const p=getPointerPos(e);scratchAt(p.x,p.y);checkAutoReveal();});
+cvsHeart.addEventListener('pointermove',e=>{if(!drawing)return;const p=getPointerPos(e);scratchAt(p.x,p.y);checkAutoReveal();});
+cvsHeart.addEventListener('pointerup',e=>{drawing=false;try{cvsHeart.releasePointerCapture(e.pointerId);}catch(_){}}); 
+cvsHeart.addEventListener('pointercancel',()=>drawing=false);
+</script>
+</body>
+</html>
